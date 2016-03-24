@@ -144,6 +144,11 @@ for listing in listings:
     else:
         print "=================could not map====================="
         print json.dumps(listing.returnDict())+"\n"
+        print listingTitle
+        print listingManu
+        if bestMatchProd != -1:
+            print "=================closest product==================="
+            print json.dumps(bestMatchProd.returnDict())+"\n"
 listingsFile.close()
 resultsFile = open("results.txt", "w")
 for product in productToResult:
