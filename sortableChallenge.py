@@ -3,16 +3,21 @@ import json
 import re, string
 
 pattern = re.compile('[^a-zA-Z0-9\ ]')
-
-def similarRatio(strA, strB):
-    return SequenceMatcher(None, strA, strB).ratio()
-
+#remove extra white space and non alpha-numeric characters
+#cast alpha characters to lower case
 def processString(string):
     copyStr = string.strip().lower()
     copyStr = pattern.sub('', copyStr)
     copyStr = ' '.join(copyStr.split())
     return copyStr
 
+#used to find most similar string between product name and listing title
+#returns a ratio 0<=r<=1 on the similarity of strA and strB
+def similarRatio(strA, strB):
+    return SequenceMatcher(None, strA, strB).ratio()
+
+
+#Product object for storing parsed data and returning dictionary for JSON output
 class Product:
     def __init__(self,
                  productName,
@@ -39,7 +44,7 @@ class Product:
                     "model" : self.model,
                     "announced_date": self.announcedDate}
         
-
+#Listing object for storing parsed data and returning dictionry for JSON output
 class Listing:
     def __init__(self,
                  title,
@@ -55,7 +60,8 @@ class Listing:
                 "manufacturer" : self.manufacturer,
                 "currency" : self.currency,
                 "price" : self.price}
-        
+
+#Result object for storing completed mapped listings to a single product    
 class Result:
     def __init__(self, productName):
         self.productName = productName
@@ -71,7 +77,8 @@ class Result:
     def returnDict(self):
         return {"product_name": self.productName,
                 "listings" : [listing.returnDict() for listing in self.listings]}
-                
+
+#parse JSON in to Product object                
 def jsonToProduct(line):
     j = json.loads(line)
     prodName = manu = family = model = annouDate = "NA"
@@ -88,6 +95,7 @@ def jsonToProduct(line):
         
     return Product(prodName, manu, family, model, annouDate)
 
+#parse JSON in to Listing object
 def jsonToListing(line):
     j = json.loads(line)
     title = manu = currency = price = "NA"
@@ -102,58 +110,65 @@ def jsonToListing(line):
 
     return Listing(title, manu, currency, price)
 
-products = []
-productsFile = open("products.txt", "r")
-for line in productsFile:
-    newProduct = jsonToProduct(line)
-    products.append(newProduct)
+def parseProducts(productsPath):
+    products = []
+    productsFile = open(productsPath, "r")
+    for line in productsFile:
+        newProduct = jsonToProduct(line)
+        products.append(newProduct)
 
-productsFile.close()
+    productsFile.close()
+    return products
 
-listings = []
-listingsFile = open("listings.txt", "r")
-for line in listingsFile:
-    j = json.loads(line)
-    listings.append(jsonToListing(line))
+def parseListings(listingsPath):
+    listings = []
+    listingsFile = open(listingsPath, "r")
+    for line in listingsFile:
+        j = json.loads(line)
+        listings.append(jsonToListing(line))
+    listingsFile.close()
+    return listings
 
-productToResult = {}
-totalListings = 0
-mappedListings = 0
-for listing in listings:
-    totalListings += 1
-    listingManu = processString(listing.manufacturer)
-    bestRatio = float("-inf")
-    bestMatchProd = -1
-    listingTitle = processString(listing.title)
-    listingManu = processString(listing.manufacturer)
-    for product in products:
-        productManu = processString(product.manufacturer)
-        productModel = processString(product.model)
-        if productManu in listingManu and productModel in listingTitle:
-            productTitle = processString(product.productName)
-            similarityRatio = similarRatio(listingTitle, productTitle)
-            if similarityRatio > bestRatio:
-                bestRatio = similarityRatio
-                bestMatchProd = product
-    if bestMatchProd != -1:
-        mappedListings += 1
-        if bestMatchProd in productToResult:
-            productToResult[bestMatchProd].addListing(listing)
-        else:
-            productToResult[bestMatchProd] = Result(bestMatchProd.productName, [listing])
-    else:
-        print "=================could not map====================="
-        print json.dumps(listing.returnDict())+"\n"
-        print listingTitle
-        print listingManu
+def matchProdListing(products, listings):
+    productToResult = {}
+    totalListings = 0
+    mappedListings = 0
+    for listing in listings:
+        totalListings += 1
+        listingManu = processString(listing.manufacturer)
+        bestRatio = float("-inf")
+        bestMatchProd = -1
+        listingTitle = processString(listing.title)
+        listingManu = processString(listing.manufacturer)
+        for product in products:
+            productManu = processString(product.manufacturer)
+            productModel = processString(product.model)
+            if productManu in listingManu and productModel in listingTitle:
+                productTitle = processString(product.productName)
+                similarityRatio = similarRatio(listingTitle, productTitle)
+                if similarityRatio > bestRatio:
+                    bestRatio = similarityRatio
+                    bestMatchProd = product
         if bestMatchProd != -1:
-            print "=================closest product==================="
-            print json.dumps(bestMatchProd.returnDict())+"\n"
-listingsFile.close()
-resultsFile = open("results.txt", "w")
-for product in productToResult:
-    resultsFile.write(json.dumps(productToResult[product].returnDict())+"\n")
-resultsFile.close()
+            mappedListings += 1
+            if bestMatchProd in productToResult:
+                productToResult[bestMatchProd].addListing(listing)
+            else:
+                productToResult[bestMatchProd] = Result(bestMatchProd.productName, [listing])
+    return productToResult
 
-print mappedListings, totalListings
-print "Mapped " + str(float(mappedListings)/totalListings) + "%"
+def writeResults(resultsPath, productToResult):
+    resultsFile = open(resultsPath, "w")
+    for product in productToResult:
+        resultsFile.write(json.dumps(productToResult[product].returnDict())+"\n")
+    resultsFile.close()
+
+def main():
+    products = parseProducts("products.txt")
+    listings = parseListings("listings.txt")
+    productToResult = matchProdListing(products, listings)
+    writeResults("results.txt", productToResult)
+    
+
+if __name__ == "__main__":
+    main()
